@@ -19,12 +19,19 @@ import {
   X,
   Printer,
   MessageSquare,
-  Send
+  Send,
+  Cloud,
+  LogOut,
+  LogIn,
+  User as UserIcon,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateQuestions, Question, getAIChatResponse } from './services/geminiService';
 import { QuestionPaper, AppSettings, CLASSES, SUBJECTS } from './types';
 import { cn } from './lib/utils';
+import { supabase } from './lib/supabase';
+import { User } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import html2canvas from 'html2canvas';
@@ -37,6 +44,11 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
   
   // State for data
   const [savedPapers, setSavedPapers] = useState<QuestionPaper[]>([]);
@@ -80,7 +92,128 @@ export default function App() {
       setSettings(parsed);
       setPaperInfo(prev => ({ ...prev, schoolName: parsed.defaultSchoolName }));
     }
+
+    // Check for Supabase session
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchFromSupabase(session.user.id);
+        }
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchFromSupabase(session.user.id);
+        }
+      });
+
+      return () => subscription.unsubscribe();
+    }
   }, []);
+
+  const fetchFromSupabase = async (userId: string) => {
+    if (!supabase) return;
+    setIsSyncing(true);
+    try {
+      // Fetch papers
+      const { data: papersData, error: papersError } = await supabase
+        .from('papers')
+        .select('*')
+        .eq('user_id', userId);
+      
+      if (papersData && !papersError) {
+        // Merge with local papers or replace? Let's merge for now.
+        setSavedPapers(prev => {
+          const merged = [...papersData, ...prev];
+          // Filter unique by ID
+          return Array.from(new Map(merged.map(p => [p.id, p])).values());
+        });
+      }
+
+      // Fetch settings
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
+      if (settingsData && !settingsError) {
+        setSettings(settingsData.config);
+      }
+    } catch (error) {
+      console.error('Error fetching from Supabase:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const syncToSupabase = async () => {
+    if (!user || !supabase) return;
+    setIsSyncing(true);
+    try {
+      // Upsert papers
+      const papersToSync = savedPapers.map(p => ({
+        ...p,
+        user_id: user.id
+      }));
+
+      const { error: papersError } = await supabase
+        .from('papers')
+        .upsert(papersToSync, { onConflict: 'id' });
+
+      if (papersError) throw papersError;
+
+      // Upsert settings
+      const { error: settingsError } = await supabase
+        .from('settings')
+        .upsert({
+          user_id: user.id,
+          config: settings
+        }, { onConflict: 'user_id' });
+
+      if (settingsError) throw settingsError;
+
+      alert('সুপাবেস-এর সাথে সফলভাবে সিঙ্ক হয়েছে!');
+    } catch (error) {
+      console.error('Error syncing to Supabase:', error);
+      alert('সিঙ্ক করতে সমস্যা হয়েছে।');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) return;
+    setIsAuthLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email: authEmail,
+      password: authPassword,
+    });
+    if (error) alert(error.message);
+    else alert('আপনার ইমেইল চেক করুন!');
+    setIsAuthLoading(false);
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) return;
+    setIsAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail,
+      password: authPassword,
+    });
+    if (error) alert(error.message);
+    setIsAuthLoading(false);
+  };
+
+  const handleSignOut = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   // Save data to LocalStorage
   useEffect(() => {
@@ -130,6 +263,17 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
     setSavedPapers([newPaper, ...savedPapers]);
+    
+    // Auto-sync to Supabase if logged in
+    if (user && supabase) {
+      supabase.from('papers').upsert({
+        ...newPaper,
+        user_id: user.id
+      }).then(({ error }) => {
+        if (error) console.error('Error auto-syncing paper:', error);
+      });
+    }
+
     setActiveSection('dashboard');
     // Reset
     setGeneratedQuestions([]);
@@ -892,14 +1036,97 @@ export default function App() {
                     />
                   </div>
                   <div className="pt-6 border-t border-slate-100">
-                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-2xl">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                      <Cloud size={20} className="text-blue-600" />
+                      সুপাবেস (Supabase) ব্যাকএন্ড সিঙ্ক
+                    </h3>
+                    
+                    {!supabase ? (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-sm">
+                        সুপাবেস কনফিগারেশন পাওয়া যায়নি। দয়া করে <strong>VITE_SUPABASE_URL</strong> এবং <strong>VITE_SUPABASE_ANON_KEY</strong> এনভায়রনমেন্ট ভেরিয়েবল সেট করুন।
+                      </div>
+                    ) : !user ? (
+                      <div className="space-y-4 bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                        <p className="text-sm text-slate-600 mb-4">আপনার ডাটা অনলাইনে সেভ করতে লগইন করুন।</p>
+                        <div className="space-y-3">
+                          <input 
+                            type="email"
+                            placeholder="ইমেইল"
+                            value={authEmail}
+                            onChange={(e) => setAuthEmail(e.target.value)}
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                          <input 
+                            type="password"
+                            placeholder="পাসওয়ার্ড"
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                          <div className="grid grid-cols-2 gap-3 pt-2">
+                            <button 
+                              onClick={handleSignIn}
+                              disabled={isAuthLoading}
+                              className="bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                              {isAuthLoading ? <RefreshCw className="animate-spin" size={18} /> : <LogIn size={18} />}
+                              লগইন
+                            </button>
+                            <button 
+                              onClick={handleSignUp}
+                              disabled={isAuthLoading}
+                              className="bg-white text-blue-600 border border-blue-600 py-3 rounded-xl font-bold hover:bg-blue-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                              {isAuthLoading ? <RefreshCw className="animate-spin" size={18} /> : <UserIcon size={18} />}
+                              সাইন আপ
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 bg-blue-50 p-6 rounded-3xl border border-blue-100">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                              <UserIcon size={20} />
+                            </div>
+                            <div>
+                              <p className="font-bold text-blue-900">{user.email}</p>
+                              <p className="text-xs text-blue-700">সফলভাবে লগইন করা হয়েছে</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={handleSignOut}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="লগ আউট"
+                          >
+                            <LogOut size={20} />
+                          </button>
+                        </div>
+                        
+                        <button 
+                          onClick={syncToSupabase}
+                          disabled={isSyncing}
+                          className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50"
+                        >
+                          {isSyncing ? (
+                            <RefreshCw className="animate-spin" size={20} />
+                          ) : (
+                            <RefreshCw size={20} />
+                          )}
+                          সুপাবেস-এর সাথে সিঙ্ক করুন
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="mt-6 flex items-center justify-between p-4 bg-green-50 rounded-2xl">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                        <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center text-white">
                           <CheckCircle2 size={20} />
                         </div>
                         <div>
-                          <p className="font-bold text-blue-900">অটো-সেভ সক্রিয়</p>
-                          <p className="text-xs text-blue-700">আপনার সব ডাটা ব্রাউজারে সেভ হচ্ছে।</p>
+                          <p className="font-bold text-green-900">অটো-সেভ সক্রিয়</p>
+                          <p className="text-xs text-green-700">আপনার সব ডাটা ব্রাউজারে সেভ হচ্ছে।</p>
                         </div>
                       </div>
                     </div>
