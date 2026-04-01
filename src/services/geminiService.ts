@@ -3,7 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 const apiKey = (typeof process !== 'undefined' && process.env.GEMINI_API_KEY) || import.meta.env.VITE_GEMINI_API_KEY || "";
 const ai = new GoogleGenAI({ apiKey });
 
-export type QuestionType = 'MCQ' | 'SHORT' | 'CQ' | 'FILL_BLANKS' | 'MATCHING' | 'DESCRIPTIVE';
+export type QuestionType = 'MCQ' | 'SHORT' | 'CQ' | 'FILL_BLANKS' | 'MATCHING' | 'DESCRIPTIVE' | 'MATH';
 
 export interface Question {
   id: string;
@@ -12,6 +12,7 @@ export interface Question {
   options?: string[];
   answer: string;
   marks: number;
+  explanation?: string;
   matchingPairs?: { left: string; right: string }[];
 }
 
@@ -22,6 +23,7 @@ export interface QuestionCounts {
   FILL_BLANKS: number;
   MATCHING: number;
   DESCRIPTIVE: number;
+  MATH: number;
 }
 
 export const generateQuestions = async (className: string, subject: string, topic: string, counts: QuestionCounts) => {
@@ -34,13 +36,15 @@ export const generateQuestions = async (className: string, subject: string, topi
   - ${counts.FILL_BLANKS} Fill in the blanks (শুন্যস্থান পূরণ).
   - ${counts.MATCHING} Matching questions (বাম-ডান মিলানো). For matching, provide a list of pairs.
   - ${counts.DESCRIPTIVE} Descriptive questions (বর্ণনামূলক প্রশ্ন).
+  - ${counts.MATH} Simple Math questions (e.g., 80 + 70 = ?, 15 * 4 = ?).
   
   Provide the output in JSON format as an array of objects.
   Each object should have:
-  - type: "MCQ", "SHORT", "CQ", "FILL_BLANKS", "MATCHING", or "DESCRIPTIVE"
+  - type: "MCQ", "SHORT", "CQ", "FILL_BLANKS", "MATCHING", "DESCRIPTIVE", or "MATH"
   - question: The question text in Bengali. For MATCHING, this can be "বাম পাশের বাক্যাংশের সাথে ডান পাশের বাক্যাংশ মিল করো।".
   - options: (For MCQ only) Array of 4 options in Bengali.
   - answer: The correct answer or a model answer in Bengali. For MATCHING, provide the correct pairs as a string or list.
+  - explanation: A detailed explanation in Bengali of why this is the correct answer. This is very important for student learning.
   - marks: Recommended marks for the question.
   - matchingPairs: (For MATCHING only) Array of objects with { left: string, right: string }.`;
 
@@ -54,13 +58,14 @@ export const generateQuestions = async (className: string, subject: string, topi
         items: {
           type: Type.OBJECT,
           properties: {
-            type: { type: Type.STRING, enum: ["MCQ", "SHORT", "CQ", "FILL_BLANKS", "MATCHING", "DESCRIPTIVE"] },
+            type: { type: Type.STRING, enum: ["MCQ", "SHORT", "CQ", "FILL_BLANKS", "MATCHING", "DESCRIPTIVE", "MATH"] },
             question: { type: Type.STRING },
             options: { 
               type: Type.ARRAY, 
               items: { type: Type.STRING } 
             },
             answer: { type: Type.STRING },
+            explanation: { type: Type.STRING },
             marks: { type: Type.NUMBER },
             matchingPairs: {
               type: Type.ARRAY,
@@ -74,7 +79,7 @@ export const generateQuestions = async (className: string, subject: string, topi
               }
             }
           },
-          required: ["type", "question", "answer", "marks"]
+          required: ["type", "question", "answer", "explanation", "marks"]
         }
       }
     }
