@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel, GenerateContentResponse } from "@google/genai";
 
 const apiKey = (typeof process !== 'undefined' && process.env.GEMINI_API_KEY) || import.meta.env.VITE_GEMINI_API_KEY || "";
 const ai = new GoogleGenAI({ apiKey });
@@ -52,6 +52,7 @@ export const generateQuestions = async (className: string, subject: string, topi
     model: "gemini-3-flash-preview",
     contents: prompt,
     config: {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.ARRAY,
@@ -97,15 +98,27 @@ export const generateQuestions = async (className: string, subject: string, topi
   }
 };
 
-export const getAIChatResponse = async (message: string, history: any[]) => {
+export const getAIChatResponse = async (message: string, history: any[], onChunk?: (text: string) => void) => {
   const chat = ai.chats.create({
     model: "gemini-3-flash-preview",
     config: {
       systemInstruction: "আপনি একজন অভিজ্ঞ শিক্ষক এবং পড়াশোনা বিষয়ক সহকারী। আপনি ব্যবহারকারীর সাথে পড়াশোনা, প্রশ্ন-উত্তর এবং বিভিন্ন বিষয় নিয়ে আলোচনা করবেন। আপনার সব উত্তর বাংলা ভাষায় হতে হবে।",
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
     },
     history: history,
   });
 
-  const response = await chat.sendMessage({ message });
-  return response.text;
+  if (onChunk) {
+    const result = await chat.sendMessageStream({ message });
+    let fullText = "";
+    for await (const chunk of result) {
+      const text = (chunk as GenerateContentResponse).text || "";
+      fullText += text;
+      onChunk(text);
+    }
+    return fullText;
+  } else {
+    const response = await chat.sendMessage({ message });
+    return response.text;
+  }
 };

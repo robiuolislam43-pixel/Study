@@ -858,8 +858,27 @@ export default function App() {
         role: msg.role,
         parts: [{ text: msg.text }]
       }));
-      const aiResponse = await getAIChatResponse(userMessage, history);
-      setChatMessages(prev => [...prev, { role: 'model', text: aiResponse || 'দুঃখিত, আমি উত্তর দিতে পারছি না।' }]);
+      
+      // Add an empty model message that we will update with chunks
+      setChatMessages(prev => [...prev, { role: 'model', text: '' }]);
+      
+      let fullResponse = "";
+      await getAIChatResponse(userMessage, history, (chunk) => {
+        fullResponse += chunk;
+        setChatMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { role: 'model', text: fullResponse };
+          return newMessages;
+        });
+      });
+      
+      if (!fullResponse) {
+        setChatMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { role: 'model', text: 'দুঃখিত, আমি উত্তর দিতে পারছি না।' };
+          return newMessages;
+        });
+      }
     } catch (error) {
       console.error('Chat error:', error);
       setChatMessages(prev => [...prev, { role: 'model', text: 'দুঃখিত, একটি সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।' }]);
