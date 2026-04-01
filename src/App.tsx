@@ -176,15 +176,18 @@ export default function App() {
     }
 
     // Check for Supabase session
+    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 2000));
+    
     if (supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchFromSupabase(session.user.id).finally(() => setIsAppLoading(false));
-        } else {
-          setIsAppLoading(false);
-        }
-      });
+      Promise.all([
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          setUser(session?.user ?? null);
+          if (session?.user) {
+            return fetchFromSupabase(session.user.id);
+          }
+        }),
+        minLoadingTime
+      ]).finally(() => setIsAppLoading(false));
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user ?? null);
@@ -195,7 +198,7 @@ export default function App() {
 
       return () => subscription.unsubscribe();
     } else {
-      setIsAppLoading(false);
+      minLoadingTime.then(() => setIsAppLoading(false));
     }
   }, []);
 
@@ -332,25 +335,91 @@ export default function App() {
 
   if (isAppLoading) {
     return (
-      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-[100]">
+      <div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center z-[100] overflow-hidden">
+        {/* Background Effects */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.2, 1],
+              opacity: [0.1, 0.2, 0.1]
+            }}
+            transition={{ duration: 4, repeat: Infinity }}
+            className="absolute -top-1/2 -left-1/2 w-full h-full bg-indigo-500/20 rounded-full blur-[120px]"
+          />
+          <motion.div 
+            animate={{ 
+              scale: [1.2, 1, 1.2],
+              opacity: [0.1, 0.2, 0.1]
+            }}
+            transition={{ duration: 5, repeat: Infinity }}
+            className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-purple-500/20 rounded-full blur-[120px]"
+          />
+        </div>
+
         <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="relative"
+          initial={{ scale: 0.5, opacity: 0, rotate: -10 }}
+          animate={{ scale: 1, opacity: 1, rotate: 0 }}
+          transition={{ 
+            type: "spring",
+            stiffness: 100,
+            damping: 15,
+            duration: 1
+          }}
+          className="relative z-10"
         >
-          <div className="w-24 h-24 border-4 border-indigo-100 rounded-full animate-pulse" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <GraduationCap size={40} className="text-indigo-600" />
+          <div className="w-32 h-32 bg-linear-to-br from-indigo-600 to-purple-600 rounded-[2.5rem] flex items-center justify-center shadow-[0_20px_50px_rgba(79,70,229,0.3)] relative group">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              className="absolute inset-0 border-2 border-white/20 rounded-[2.5rem] scale-110"
+            />
+            <GraduationCap size={60} className="text-white drop-shadow-lg" />
           </div>
         </motion.div>
-        <motion.p 
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="mt-6 text-slate-900 font-black text-xl tracking-tight"
+
+        <div className="mt-12 text-center relative z-10">
+          <motion.h1 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.8 }}
+            className="text-5xl font-black text-white tracking-tighter mb-2"
+          >
+            পড়ালেখা<span className="text-indigo-400">.প্রো</span>
+          </motion.h1>
+          <motion.div 
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ delay: 0.8, duration: 1 }}
+            className="h-1 w-24 bg-linear-to-r from-indigo-500 to-purple-500 mx-auto rounded-full mb-4"
+          />
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.2, duration: 0.8 }}
+            className="text-slate-400 font-bold text-sm uppercase tracking-[0.3em]"
+          >
+            স্মার্ট লার্নিং প্ল্যাটফর্ম
+          </motion.p>
+        </div>
+
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.5 }}
+          className="absolute bottom-12 flex flex-col items-center gap-3"
         >
-          অপেক্ষা করুন...
-        </motion.p>
+          <div className="flex gap-1">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                className="w-1.5 h-1.5 bg-indigo-500 rounded-full"
+              />
+            ))}
+          </div>
+        </motion.div>
+
         <AnimatePresence>
           {toast && (
             <motion.div
@@ -409,7 +478,7 @@ export default function App() {
           >
             <div className="inline-flex items-center gap-3 px-6 py-2.5 bg-white shadow-xl shadow-indigo-100 rounded-full mb-8 border border-indigo-50">
               <Sparkles size={20} className="text-indigo-600 animate-pulse" />
-              <span className="text-sm font-black text-indigo-900 uppercase tracking-widest">স্মার্ট টিচিং অ্যাসিস্ট্যান্ট প্রো</span>
+              <span className="text-sm font-black text-indigo-900 uppercase tracking-widest">পড়ালেখা.প্রো</span>
             </div>
             <h1 className="text-6xl md:text-8xl font-black text-slate-900 tracking-tighter leading-tight mb-6">
               আপনার <span className="gradient-text">ভূমিকা</span> নির্বাচন করুন
@@ -940,7 +1009,7 @@ export default function App() {
         ${header}
         ${sectionsHtml}
         <div style="margin-top: 80px; text-align: center; border-top: 2px solid #f1f5f9; padding-top: 30px; color: #94a3b8; font-size: 14px; font-weight: 700;">
-          এই প্রশ্নপত্রটি <span style="color: #4f46e5;">"টিচিং অ্যাসিস্ট্যান্ট"</span> এআই অ্যাপের মাধ্যমে তৈরি করা হয়েছে।
+          এই প্রশ্নপত্রটি <span style="color: #4f46e5;">"পড়ালেখা.প্রো"</span> এআই অ্যাপের মাধ্যমে তৈরি করা হয়েছে।
         </div>
       </div>
     `;
@@ -1041,7 +1110,7 @@ export default function App() {
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b z-50 px-6 py-4 flex items-center justify-between">
-        <h1 className="font-extrabold text-transparent bg-clip-text bg-linear-to-r from-brand-primary to-brand-accent text-xl">টিচিং অ্যাসিস্ট্যান্ট</h1>
+        <h1 className="font-black text-slate-900 text-xl tracking-tighter">পড়ালেখা<span className="text-indigo-600">.প্রো</span></h1>
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2.5 bg-slate-50 rounded-xl text-slate-600 active:scale-90 transition-transform">
           {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -1059,8 +1128,8 @@ export default function App() {
                 <Sparkles className="text-white w-8 h-8" />
               </div>
               <div>
-                <h1 className="text-2xl font-black text-slate-900 tracking-tighter leading-none">স্মার্ট</h1>
-                <p className="text-indigo-600 font-black text-xs uppercase tracking-widest mt-1">অ্যাসিস্ট্যান্ট</p>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tighter leading-none">পড়ালেখা</h1>
+                <p className="text-indigo-600 font-black text-xs uppercase tracking-widest mt-1">.প্রো</p>
               </div>
             </div>
             <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors">
@@ -1488,7 +1557,7 @@ export default function App() {
                       className="inline-flex items-center gap-3 px-6 py-2.5 bg-white/30 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-widest mb-8 border border-white/40 shadow-xl"
                     >
                       <Sparkles size={16} className="text-yellow-300 animate-pulse" />
-                      স্মার্ট টিচিং অ্যাসিস্ট্যান্ট প্রো
+                      পড়ালেখা.প্রো
                     </motion.div>
                     <motion.h2 
                       initial={{ opacity: 0, x: -30 }}
@@ -2106,7 +2175,7 @@ export default function App() {
                     </div>
                     <div>
                       <h2 className="text-lg font-black text-slate-900 tracking-tight">এআই অ্যাসিস্ট্যান্ট</h2>
-                      <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">স্মার্ট টিচিং পার্টনার</p>
+                      <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">পড়ালেখা.প্রো পার্টনার</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
