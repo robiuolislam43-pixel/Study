@@ -49,10 +49,10 @@ export const generateQuestions = async (className: string, subject: string, topi
   - matchingPairs: (For MATCHING only) Array of objects with { left: string, right: string }.`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-flash-lite-preview",
     contents: prompt,
     config: {
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.ARRAY,
@@ -100,10 +100,10 @@ export const generateQuestions = async (className: string, subject: string, topi
 
 export const getAIChatResponse = async (message: string, history: any[], onChunk?: (text: string) => void) => {
   const chat = ai.chats.create({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-flash-lite-preview",
     config: {
       systemInstruction: "আপনি একজন অভিজ্ঞ শিক্ষক এবং পড়াশোনা বিষয়ক সহকারী। আপনি ব্যবহারকারীর সাথে পড়াশোনা, প্রশ্ন-উত্তর এবং বিভিন্ন বিষয় নিয়ে আলোচনা করবেন। আপনার সব উত্তর বাংলা ভাষায় হতে হবে।",
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL }
     },
     history: history,
   });
