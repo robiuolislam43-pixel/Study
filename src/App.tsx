@@ -109,6 +109,7 @@ export default function App() {
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingItemId, setGeneratingItemId] = useState<string | null>(null);
 
   // Practice state
   const [activePaper, setActivePaper] = useState<QuestionPaper | null>(null);
@@ -542,6 +543,7 @@ export default function App() {
       return;
     }
     setIsGenerating(true);
+    setGeneratingItemId('generate');
     try {
       const questions = await generateQuestions(selectedClass, selectedSubject, topic, counts);
       if (questions.length === 0) {
@@ -555,10 +557,12 @@ export default function App() {
       showToast('সার্ভারে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।', 'error');
     } finally {
       setIsGenerating(false);
+      setGeneratingItemId(null);
     }
   };
   const handleQuickMath = async () => {
     setIsGenerating(true);
+    setGeneratingItemId('quick-math');
     try {
       const mathCounts = { 
         MCQ: 0, 
@@ -572,8 +576,9 @@ export default function App() {
       const questions = await generateQuestions(selectedClass, 'গণিত', 'যোগ, বিয়োগ, গুণ, ভাগ', mathCounts);
       
       if (questions.length === 0) {
-        showToast('ম্যাথ চ্যালেঞ্জ জেনারেট করতে সমস্যা হয়েছে।', 'error');
+        showToast('ম্যাপ চ্যালেঞ্জ জেনারেট করতে সমস্যা হয়েছে।', 'error');
         setIsGenerating(false);
+        setGeneratingItemId(null);
         return;
       }
 
@@ -600,11 +605,14 @@ export default function App() {
       console.error('Error in quick math:', error);
     } finally {
       setIsGenerating(false);
+      setGeneratingItemId(null);
     }
   };
 
   const handleQuickPractice = async (subject: string, type: 'MCQ' | 'SHORT') => {
+    const itemId = `${subject}-${type}`;
     setIsGenerating(true);
+    setGeneratingItemId(itemId);
     try {
       const practiceCounts = {
         MCQ: type === 'MCQ' ? 10 : 0,
@@ -641,6 +649,7 @@ export default function App() {
       console.error('Error in quick practice:', error);
     } finally {
       setIsGenerating(false);
+      setGeneratingItemId(null);
     }
   };
 
@@ -652,6 +661,14 @@ export default function App() {
       newSelected.add(id);
     }
     setSelectedQuestionIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedQuestionIds.size === generatedQuestions.length) {
+      setSelectedQuestionIds(new Set());
+    } else {
+      setSelectedQuestionIds(new Set(generatedQuestions.map(q => q.id)));
+    }
   };
 
   const handleCreatePaper = () => {
@@ -1361,6 +1378,9 @@ export default function App() {
                           }`}>
                             {subject === 'গণিত' ? <Calculator className="w-10 h-10" /> : 
                              subject === 'বিজ্ঞান' ? <Zap className="w-10 h-10" /> :
+                             subject === 'পদার্থবিজ্ঞান' ? <Zap className="w-10 h-10" /> :
+                             subject === 'রসায়ন' ? <Cloud className="w-10 h-10" /> :
+                             subject === 'জীববিজ্ঞান' ? <Search className="w-10 h-10" /> :
                              subject === 'ইংরেজি' ? <Languages className="w-10 h-10" /> :
                              <BookOpen className="w-10 h-10" />}
                           </div>
@@ -1382,7 +1402,7 @@ export default function App() {
                             disabled={isGenerating}
                             className="flex-1 py-5 bg-slate-900 text-white rounded-[1.25rem] text-sm font-black transition-all hover:bg-slate-800 flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
                           >
-                            {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : 'MCQ প্র্যাকটিস'}
+                            {generatingItemId === `${subject}-MCQ` ? <Loader2 className="w-5 h-5 animate-spin" /> : 'MCQ প্র্যাকটিস'}
                           </motion.button>
                           <motion.button 
                             whileHover={{ scale: 1.05, y: -2 }}
@@ -1391,7 +1411,7 @@ export default function App() {
                             disabled={isGenerating}
                             className="flex-1 py-5 bg-white text-slate-900 border-2 border-slate-100 rounded-[1.25rem] text-sm font-black transition-all hover:border-indigo-200 hover:text-indigo-600 flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
                           >
-                            {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : 'সংক্ষিপ্ত প্রশ্ন'}
+                            {generatingItemId === `${subject}-SHORT` ? <Loader2 className="w-5 h-5 animate-spin" /> : 'সংক্ষিপ্ত প্রশ্ন'}
                           </motion.button>
                         </div>
                       </motion.div>
@@ -1480,7 +1500,7 @@ export default function App() {
                         disabled={isGenerating}
                         className="w-full py-6 bg-white text-slate-900 rounded-[1.5rem] font-black text-xl hover:bg-indigo-50 transition-all shadow-2xl flex items-center justify-center gap-4 disabled:opacity-50"
                       >
-                        {isGenerating ? <Loader2 className="w-7 h-7 animate-spin" /> : 'চ্যালেঞ্জ শুরু করো'}
+                        {generatingItemId === 'quick-math' ? <Loader2 className="w-7 h-7 animate-spin" /> : 'চ্যালেঞ্জ শুরু করো'}
                       </motion.button>
                     </div>
                   </div>
@@ -1942,7 +1962,7 @@ export default function App() {
                     disabled={isGenerating || !topic}
                     className="w-full btn-primary py-4 rounded-xl font-black text-lg flex items-center justify-center gap-3 disabled:opacity-50 disabled:scale-100 transition-all shadow-md"
                   >
-                  {isGenerating ? (
+                  {generatingItemId === 'generate' ? (
                     <>
                       <RefreshCw className="animate-spin" size={20} />
                       প্রশ্ন তৈরি হচ্ছে...
@@ -1965,15 +1985,26 @@ export default function App() {
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                     <h3 className="text-xl font-black text-slate-900 tracking-tight">তৈরিকৃত প্রশ্নসমূহ <span className="text-indigo-600">({generatedQuestions.length})</span></h3>
-                    <motion.button 
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleCreatePaper}
-                      className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-100"
-                    >
-                      <CheckCircle2 size={18} />
-                      প্রশ্নপত্র তৈরি করুন ({selectedQuestionIds.size})
-                    </motion.button>
+                    <div className="flex items-center gap-3">
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleSelectAll}
+                        className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all flex items-center gap-2"
+                      >
+                        {selectedQuestionIds.size === generatedQuestions.length ? <X size={14} /> : <CheckCircle2 size={14} />}
+                        {selectedQuestionIds.size === generatedQuestions.length ? 'সবগুলো আনসেলেক্ট করুন' : 'সবগুলো সিলেক্ট করুন'}
+                      </motion.button>
+                      <motion.button 
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleCreatePaper}
+                        className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-100"
+                      >
+                        <CheckCircle2 size={18} />
+                        প্রশ্নপত্র তৈরি করুন ({selectedQuestionIds.size})
+                      </motion.button>
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-1 gap-3">
